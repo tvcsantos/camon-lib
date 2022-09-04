@@ -7,7 +7,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.lang.Class;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -15,12 +14,14 @@ import java.net.URL;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.EventObject;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import javax.swing.ImageIcon;
+import javax.swing.JOptionPane;
 import org.jdesktop.application.SingleFrameApplication;
 import org.jdesktop.application.View;
 import org.tiling.scheduling.Scheduler;
@@ -32,6 +33,8 @@ public abstract class DefaultSingleFrameApplication
         extends SingleFrameApplication {
 
     protected File settingsDirectory;
+
+    protected File savingDirectory;
 
     protected URL webLocation;
 
@@ -63,11 +66,38 @@ public abstract class DefaultSingleFrameApplication
     private static Map<Class<?>, Field[]> SETTING_FIELD_CACHE
             = new HashMap<Class<?>, Field[]>();
 
+    protected boolean saveOnExit = false;
+
     /**
      * At startup create and show the main frame of the application.
      */
     @Override protected void startup() {
         initApplication();
+        addExitListener(new ExitListener() {
+            public boolean canExit(EventObject event) {
+                saveOnExit = false;
+                if (!canShutDown()) return false;
+                if (checkChanges()) {
+                    int status = JOptionPane.showConfirmDialog(getMainFrame(),
+                    "Do you want to save changes before closing?", getName(),
+                    JOptionPane.YES_NO_CANCEL_OPTION,
+                    JOptionPane.WARNING_MESSAGE);
+                    if (status == JOptionPane.YES_OPTION)
+                        saveOnExit = true;
+                    else if (status == JOptionPane.CANCEL_OPTION)
+                        return false;
+                } else saveOnExit = true;
+                return true;
+            }
+
+            public void willExit(EventObject event) {
+                
+            }
+        });
+        /*createApplicationDirectory();
+        populateApplicationDirectory();*/
+        loadApplicationData();
+        createSettingsDirectory();
         populateSettingsDirectory();
         loadData();
         initScheduler();
@@ -75,15 +105,31 @@ public abstract class DefaultSingleFrameApplication
     }
     
     @Override protected void shutdown() {
+        preShutdown();
         super.shutdown();
-        silentSaveData();
+        if (saveOnExit) {
+            silentSaveApplicationData();
+            silentSaveData();
+        }
+    }
+
+    protected boolean checkChanges() {
+        return false;
+    }
+
+    protected void preShutdown() {
+        
+    }
+
+    protected boolean canShutDown() {
+        return true;
     }
     
     protected void showView() {
-        String name = this.getClass().getName();
+        String className = this.getClass().getName();
         try {
             Class<?> c = Class.forName(
-                    name.substring(0, name.length() - 3) + "View");
+                    className.substring(0, className.length() - 3) + "View");
             Constructor<?> cons = null;
             try {
                 cons = c.getConstructor(this.getClass());
@@ -103,12 +149,88 @@ public abstract class DefaultSingleFrameApplication
     protected void initApplication() {
         settingsDirectory = new File(AppUtils.USER_HOME,
                 initSettingsDirectory());
-        if (!settingsDirectory.exists()) settingsDirectory.mkdir();
+        if (!settingsDirectory.exists()) settingsDirectory.mkdirs();
+        savingDirectory = initSavingDirectory();
+        if (!savingDirectory.exists()) savingDirectory.mkdirs();
         webLocation = initWebLocation();
         name = initName();
         shortName = initShortName();
         updateInterval = initUpdateInterval();
     }
+
+    protected final File initSavingDirectory() {
+        return new File(AppUtils.USER_HOME, initSettingsDirectory());
+    }
+
+    protected final void loadApplicationData() {
+        ObjectInputStream ois = null;
+        try {
+            ois = new ObjectInputStream(new FileInputStream(
+                new File(getSettingsDirectory(), "appdata.db")));
+            loadApplicationData(ois);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        } finally {
+            if (ois != null) try {
+                ois.close();
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
+        }
+    }
+
+    protected final void loadApplicationData(ObjectInputStream ois)
+            throws Exception {
+        /*Field[] fields = DATA_FIELD_CACHE.get(getClass());
+        if (fields == null) {
+            fields = getAllFields(getClass(),
+                DefaultSingleFrameApplication.class, Data.class);
+            DATA_FIELD_CACHE.put(getClass(), fields);
+        }
+        for (Field field : fields) {
+            boolean accessible = field.isAccessible();
+            if (!accessible) field.setAccessible(true);
+            field.set(this, ois.readObject());
+            if (!accessible) field.setAccessible(false);
+        }*/
+        savingDirectory = (File) ois.readObject();
+    }
+
+    public final void saveApplicationData() throws FileNotFoundException,
+            IOException, IllegalArgumentException, IllegalAccessException {
+        ObjectOutputStream oos = null;
+        try {
+            oos = new ObjectOutputStream(new FileOutputStream(
+                    new File(getSettingsDirectory(), "appdata.db")));
+            saveApplicationData(oos);
+            //saveSettings();
+        } finally {
+            if (oos != null) oos.close();
+        }
+    }
+
+    protected final void saveApplicationData(ObjectOutputStream oos)
+            throws IOException,
+            IllegalArgumentException, IllegalAccessException {
+        oos.writeObject(savingDirectory);
+        /*Field[] fields = DATA_FIELD_CACHE.get(getClass());
+        if (fields == null) {
+            fields = getAllFields(getClass(),
+                DefaultSingleFrameApplication.class, Data.class);
+            DATA_FIELD_CACHE.put(getClass(), fields);
+        }
+        for (Field field : fields) {
+            boolean accessible = field.isAccessible();
+            if (!accessible) field.setAccessible(true);
+            final Object fieldValue = field.get(this);
+            synchronized(fieldValue) {
+                oos.writeObject(fieldValue);
+            }
+            if (!accessible) field.setAccessible(false);
+        }*/
+    }
+
+    protected abstract void createSettingsDirectory();
 
     protected abstract void populateSettingsDirectory();
 
@@ -117,7 +239,7 @@ public abstract class DefaultSingleFrameApplication
         try {
             // load previous settings
             settings.load(new FileInputStream(
-                    new File(getSettingsDirectory(),
+                    new File(getSavingDirectory(),
                                 "settings.props")));
             loadSettingsFields(/*settings*/);
         } catch (Exception ex) {
@@ -193,7 +315,7 @@ public abstract class DefaultSingleFrameApplication
             IllegalArgumentException, IllegalAccessException {
         updateSettings();
         settings.store(new FileOutputStream(
-                    new File(getSettingsDirectory(),
+                    new File(getSavingDirectory(),
                         "settings.props")), getName());
     }
 
@@ -208,6 +330,14 @@ public abstract class DefaultSingleFrameApplication
     protected final void silentSaveData() {
         try {
             saveData();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    protected final void silentSaveApplicationData() {
+        try {
+            saveApplicationData();
         } catch (Exception ex) {
             ex.printStackTrace();
         }
@@ -243,6 +373,10 @@ public abstract class DefaultSingleFrameApplication
 
     protected abstract void update() throws Exception;
 
+    public File getSavingDirectory() {
+        return savingDirectory;
+    }
+
     public File getSettingsDirectory() {
         return settingsDirectory;
     }
@@ -275,7 +409,7 @@ public abstract class DefaultSingleFrameApplication
 
     protected abstract Long initUpdateInterval();
 
-    public boolean isUpdatable() {
+    public final boolean isUpdatable() {
         return updateInterval != null;
     }
 
@@ -284,8 +418,7 @@ public abstract class DefaultSingleFrameApplication
      * Windows shown in our application come fully initialized from the GUI
      * builder, so this additional configuration is not needed.
      */
-    @Override protected void configureWindow(java.awt.Window root) {
-    }
+    @Override protected void configureWindow(java.awt.Window root) {}
 
     public ImageIcon getTrayImageIcon() {
         return trayImageIcon;
@@ -307,7 +440,7 @@ public abstract class DefaultSingleFrameApplication
         ObjectInputStream ois = null;
         try {
             ois = new ObjectInputStream(new FileInputStream(
-                new File(getSettingsDirectory(), "data.db")));
+                new File(getSavingDirectory(), "data.db")));
             loadData(ois);
         } catch (Exception ex) {
             ex.printStackTrace();
@@ -361,12 +494,14 @@ public abstract class DefaultSingleFrameApplication
             } catch (NumberFormatException ex) {
                 return importObjectPropertyExtended(property, type);
             }
+        } else if (type.equals(File.class)) {
+            return type.cast(new File(property));
         } else return importObjectPropertyExtended(property, type);
     }
 
     protected <T> T importObjectPropertyExtended(String property,
             Class<T> type) {
-        throw new UnsupportedOperationException();
+        throw new UnsupportedOperationException(type.toString());
     }
 
     protected final String exportProperty(Object obj) {
@@ -376,6 +511,9 @@ public abstract class DefaultSingleFrameApplication
         } else if (obj instanceof Date) {
             Date date = (Date) obj;
             return date.getTime() + "";
+        } else if (obj instanceof File) {
+            File file = (File) obj;
+            return file.getAbsolutePath();
         }
         String result = exportPropertyExtended(obj);
         if (result != null) return result;
@@ -422,7 +560,7 @@ public abstract class DefaultSingleFrameApplication
         ObjectOutputStream oos = null;
         try {
             oos = new ObjectOutputStream(new FileOutputStream(
-                    new File(getSettingsDirectory(), "data.db")));
+                    new File(getSavingDirectory(), "data.db")));
             saveData(oos);
             saveSettings();
         } finally {

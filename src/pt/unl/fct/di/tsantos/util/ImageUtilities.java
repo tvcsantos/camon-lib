@@ -1,26 +1,15 @@
 package pt.unl.fct.di.tsantos.util;
 
-import java.awt.BasicStroke;
-import java.awt.Color;
-import java.awt.Font;
-import java.awt.GradientPaint;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.Image;
-import java.awt.Rectangle;
-import java.awt.RenderingHints;
-import java.awt.Shape;
+import net.sourceforge.tuned.FileUtilities;
+
+import javax.imageio.ImageIO;
+import javax.swing.*;
+import java.awt.*;
 import java.awt.font.GlyphVector;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.awt.image.RenderedImage;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.IOException;
-
-import javax.imageio.ImageIO;
-import net.sourceforge.tuned.FileUtilities;
+import java.io.*;
 
 public class ImageUtilities {
 
@@ -187,4 +176,25 @@ public class ImageUtilities {
         return result;
     }
 
+    public static BufferedImage getImage(Class<?> aClass, String path) 
+            throws IOException {
+        InputStream is = aClass.getResourceAsStream(path);
+        return ImageIO.read(is);
+    }
+
+    public static BufferedImage getImageSafe(Class<?> aClass, String path) {
+        InputStream is = aClass.getResourceAsStream(path);
+        try {
+            if (is == null) return null;
+            return ImageIO.read(is);
+        } catch (IOException ex) {
+            return null;
+        }
+    }
+
+    public static ImageIcon getImageIconSafe(Class<?> aClass, String path) {
+        BufferedImage imageSafe = getImageSafe(aClass, path);
+        if (imageSafe == null) return null;
+        return new ImageIcon(imageSafe);
+    }
 }

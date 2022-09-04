@@ -1,5 +1,6 @@
 package pt.unl.fct.di.tsantos.util.tmdb;
 
+import org.apache.http.HttpException;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.FileInputStream;
@@ -8,7 +9,6 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStreamWriter;
-import java.io.StringWriter;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.URLEncoder;
@@ -51,7 +51,6 @@ import net.htmlparser.jericho.StartTag;
 import net.sourceforge.tuned.FileUtilities;
 import net.sourceforge.tuned.FilterIterator;
 import net.sourceforge.tuned.StringUtilities;
-import org.apache.commons.httpclient.HttpException;
 import org.w3c.dom.Document;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
@@ -231,8 +230,7 @@ public class TMDbSearch {
     }
 
     public static String getID(String imdbID)
-        throws HttpException,
-        IOException, SAXException, ParserConfigurationException,
+        throws IOException, SAXException, ParserConfigurationException,
         XPathExpressionException {
         checkParameter(imdbID);
         Document response = WebRequest.getDocument(
@@ -257,7 +255,7 @@ public class TMDbSearch {
 
     }
 
-    public static Document getInfo(String mdbID) throws HttpException,
+    public static Document getInfo(String mdbID) throws
         IOException, SAXException, ParserConfigurationException,
         XPathExpressionException {
         checkParameter(mdbID);
@@ -544,7 +542,8 @@ public class TMDbSearch {
     public static void saveXMLInfoFiles(Collection<File> files, 
             FileFilter filter, File save, String ext, boolean forced)
             throws ParserConfigurationException,
-            XPathExpressionException, IOException, SAXException, XMLStreamException {
+            XPathExpressionException, IOException, SAXException, 
+            XMLStreamException, HttpException {
         //// LOG INFO
         String sourceMethod = "saveXMLInfoFiles";
 

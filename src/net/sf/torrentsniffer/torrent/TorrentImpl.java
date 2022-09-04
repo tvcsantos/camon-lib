@@ -22,8 +22,6 @@ import net.sf.torrentsniffer.tracker.ScrapeNotSupportedException;
 import net.sf.torrentsniffer.tracker.Tracker;
 import net.sf.torrentsniffer.tracker.TrackerImpl;
 
-//import org.apache.log4j.Logger;
-
 /**
  * Implementation of the Torrent.
  * 
@@ -31,9 +29,6 @@ import net.sf.torrentsniffer.tracker.TrackerImpl;
  *  
  */
 public class TorrentImpl implements Torrent {
-
-   /* private final static Logger log = Logger.getLogger(TorrentImpl.class
-            .getName());*/
 
     private Bencoding bencoding = new BencodingImpl();
 
@@ -277,8 +272,6 @@ public class TorrentImpl implements Torrent {
             infoHash = URLEncoder.encode(infoHash, "ISO-8859-1");
 
             scrapeUrl += infoHash;
-
-         //   log.debug("Scrape URL is '" + scrapeUrl + "'");
 
             Dictionary dictionary = (Dictionary) bencoding.decode(new URL(
                     scrapeUrl));

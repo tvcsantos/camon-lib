@@ -1,29 +1,35 @@
 package pt.unl.fct.di.tsantos.util.download.subtitile;
 
-import java.util.Set;
-import pt.unl.fct.di.tsantos.util.exceptions.UnsupportedFormatException;
-import pt.unl.fct.di.tsantos.util.FileUtils;
-import pt.unl.fct.di.tsantos.util.io.StringOutputStream;
 import com.sun.syndication.feed.synd.SyndEntry;
+import net.htmlparser.jericho.Element;
+import net.htmlparser.jericho.Source;
+import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.commons.lang.StringUtils;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.message.BasicNameValuePair;
+import org.apache.http.util.EntityUtils;
+import pt.unl.fct.di.tsantos.util.Pair;
+import pt.unl.fct.di.tsantos.util.exceptions.UnsupportedFormatException;
+import pt.unl.fct.di.tsantos.util.net.RSSFeed;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import net.htmlparser.jericho.Element;
-import net.htmlparser.jericho.Source;
-import org.apache.commons.httpclient.HttpClient;
-import org.apache.commons.httpclient.HttpMethod;
-import org.apache.commons.httpclient.NameValuePair;
-import org.apache.commons.httpclient.URI;
-import org.apache.commons.httpclient.methods.GetMethod;
-import org.apache.commons.httpclient.methods.PostMethod;
-import org.apache.commons.lang.StringEscapeUtils;
-import org.apache.commons.lang.StringUtils;
-import pt.unl.fct.di.tsantos.util.Pair;
-import pt.unl.fct.di.tsantos.util.net.RSSFeed;
+
 import static pt.unl.fct.di.tsantos.util.download.subtitile.Language.*;
 
 public class LegendasTVDownloader extends RSSSubtitleDownloader {
@@ -44,7 +50,7 @@ public class LegendasTVDownloader extends RSSSubtitleDownloader {
                                         RSSFeed.Type.ORIGINAL);
 
     protected final HttpClient client;
-    protected HttpMethod currentMethod;
+    protected HttpUriRequest currentMethod;
 
     private static final Language[] supportedLangs = {Language.ALL,
         PB, EN, ES, FR, DE, JA, DA, NO,
@@ -75,55 +81,70 @@ public class LegendasTVDownloader extends RSSSubtitleDownloader {
     public LegendasTVDownloader(List<String> fileNames, File saveDirectory,
             String user, String password) {
         super(fileNames, saveDirectory, user, password);
-        this.client = new HttpClient();
+        this.client = new DefaultHttpClient();
     }
 
     public LegendasTVDownloader(List<String> fileNames, Set<Language> langs,
             File saveDirectory, String user, String password) {
         super(fileNames, langs, saveDirectory, user, password);
-        this.client = new HttpClient();
+        this.client = new DefaultHttpClient();
     }
 
     @Override
     protected void login() throws IOException {
-        GetMethod getPage = new GetMethod(WEBURL);
+        HttpGet getPage = new HttpGet(WEBURL);
 
-        client.executeMethod(getPage);
+        client.execute(getPage);
 
-        getPage.releaseConnection();
+        getPage.abort();//releaseConnection();
 
-        PostMethod postLogin = new PostMethod();
-        postLogin.setURI(new URI(new URI(WEBURL + "/index.php"),
-                "login_verificar.php"));
+        HttpPost postLogin = new HttpPost();
+        postLogin.setURI(URI.create(WEBURL + "/login_verificar.php"));
 
-        NameValuePair[] data = {
-            new NameValuePair("txtLogin", user),
-            new NameValuePair("txtSenha", password)
-        };
+        /*NameValuePair[] data = {
+            new BasicNameValuePair("txtLogin", user),
+            new BasicNameValuePair("txtSenha", password)
+        };*/
+        
+        List<NameValuePair> list = new LinkedList<NameValuePair>();
+        list.add(new BasicNameValuePair("txtLogin", user));
+        list.add(new BasicNameValuePair("txtSenha", password));
+        
+        UrlEncodedFormEntity newentity = new UrlEncodedFormEntity(list);
 
-        postLogin.setRequestBody(data);
+        postLogin.setEntity(newentity);
+        //postLogin.setRequestBody(data);
 
-        client.executeMethod(postLogin);
+        client.execute(postLogin);
+        
+        HttpResponse response = client.execute(postLogin);
 
-        InputStream ins = postLogin.getResponseBodyAsStream();
+        /*InputStream ins = postLogin.getResponseBodyAsStream();
         StringOutputStream os = new StringOutputStream();
         FileUtils.copy(ins, os);
         String response = os.getString();
         ins.close();
         os.close();
 
-        postLogin.releaseConnection();
+        postLogin.releaseConnection();*/
+        
+        HttpEntity entity = response.getEntity();
+        String answer = EntityUtils.toString(entity);
 
-        if (response.contains("Dados incorretos!"))
+        //postLogin.releaseConnection();
+        postLogin.abort();
+
+        if (answer.contains("Dados incorretos!"))
             throw new IOException("Cannot login. " +
                     "Incorrect username or password");
     }
 
     @Override
     protected void logout() throws IOException {
-        GetMethod logoutPage = new GetMethod(WEBURL + "/logoff.php");
-        client.executeMethod(logoutPage);
-        logoutPage.releaseConnection();
+        HttpGet logoutPage = new HttpGet(WEBURL + "/logoff.php");
+        client.execute(logoutPage);
+        //logoutPage.releaseConnection();
+        logoutPage.abort();
     }
 
     @Override
@@ -154,9 +175,11 @@ public class LegendasTVDownloader extends RSSSubtitleDownloader {
             
             SyndEntry res = se;
             String url = se.getLink();
-            HttpMethod method = new GetMethod(url);
-            client.executeMethod(method);
-            InputStream body = method.getResponseBodyAsStream();
+            HttpGet method = new HttpGet(url);
+            HttpResponse response = client.execute(method);
+            HttpEntity entity = response.getEntity();
+            //InputStream body = method.getResponseBodyAsStream();
+            InputStream body = entity.getContent();            
             Source source = new Source(body);
             Element el = source.getFirstElement("class", "infoadicional", true);
             Element x = el.getFirstElement("class", "infolegenda", true);
@@ -175,7 +198,8 @@ public class LegendasTVDownloader extends RSSSubtitleDownloader {
                     res = null;
                 }
             }
-            method.releaseConnection();
+            //method.releaseConnection();
+            method.abort();
             return res;
         } catch (IOException ex) {
         } catch (UnsupportedFormatException ex) {}
@@ -214,19 +238,21 @@ public class LegendasTVDownloader extends RSSSubtitleDownloader {
             throws IOException {
         String downloadURL = si.getSubDownloadLink();
         String downFileName = null;
-        currentMethod = new GetMethod(downloadURL);
-        client.executeMethod(currentMethod);
+        currentMethod = new HttpGet(downloadURL);
+        HttpResponse response = client.execute(currentMethod);
+        HttpEntity entity = response.getEntity();
         String uri = currentMethod.getURI().toString();
         int index = uri.lastIndexOf("/");
         if (index >= 0) downFileName = uri.substring(index + 1);
         si.setDownFileName(downFileName);
-        return currentMethod.getResponseBodyAsStream();
+        return entity.getContent();
     }
 
     @Override
     protected void postDownloadSubtitle() throws IOException {
         super.postDownloadSubtitle();
-        if (currentMethod != null) currentMethod.releaseConnection();
+        //if (currentMethod != null) currentMethod.releaseConnection();
+        if (currentMethod != null) currentMethod.abort();
         currentMethod = null;
     }
     

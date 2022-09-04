@@ -7,44 +7,51 @@ import java.util.LinkedList;
 import java.util.List;
 import net.htmlparser.jericho.Element;
 import net.htmlparser.jericho.Source;
-import org.apache.commons.httpclient.Credentials;
-import org.apache.commons.httpclient.HttpClient;
-import org.apache.commons.httpclient.HttpException;
-import org.apache.commons.httpclient.HttpStatus;
-import org.apache.commons.httpclient.UsernamePasswordCredentials;
-import org.apache.commons.httpclient.auth.AuthScope;
-import org.apache.commons.httpclient.methods.GetMethod;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpException;
+import org.apache.http.HttpResponse;
+import org.apache.http.HttpStatus;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.Credentials;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.util.EntityUtils;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import pt.unl.fct.di.tsantos.util.FileUtils;
-import pt.unl.fct.di.tsantos.util.io.StringOutputStream;
 
 public class uTorrent {
 
     protected String host;
     protected int port;
-    protected HttpClient client;
+    protected DefaultHttpClient client;
     protected String token;
 
     public uTorrent(String host, int port) {
         this.host = host;
         this.port = port;
         this.token = null;
-        this.client = new HttpClient();
+        this.client = new DefaultHttpClient();
     }
 
     public synchronized void login(String username, String password)
             throws HttpException, IOException {
         if (isLoggedIn()) logout();
         Credentials cred = new UsernamePasswordCredentials(username, password);
-        client.getState().setCredentials(AuthScope.ANY, cred);
-        GetMethod method = new GetMethod(
+        client.getCredentialsProvider().setCredentials(AuthScope.ANY, cred);
+        //client.getState().setCredentials(AuthScope.ANY, cred);
+        HttpGet method = new HttpGet(
                 "http://" + host + ":" + port + "/gui/token.html");
-        int executeMethod = client.executeMethod(method);
+        HttpResponse response = client.execute(method);
+        HttpEntity entity = response.getEntity();
+        /*int executeMethod = client.executeMethod(method);
         if (executeMethod != HttpStatus.SC_OK)
-            throw new HttpException(method.getStatusLine().toString());
-        InputStream is = method.getResponseBodyAsStream();
+            throw new HttpException(method.getStatusLine().toString());*/
+        int statusCode = response.getStatusLine().getStatusCode();
+        if (statusCode != HttpStatus.SC_OK)
+            throw new HttpException(response.getStatusLine().toString());
+        InputStream is = entity.getContent();//.getResponseBodyAsStream();
         Source source = new Source(is);
         source.setLogger(null);
         Element e = source.getFirstElement("id", "token", false);
@@ -57,22 +64,24 @@ public class uTorrent {
     }
 
     public synchronized void logout() {
-        client = new HttpClient();
+        client = new DefaultHttpClient();
         token = null;
     }
 
     public Collection<String> listDownloading()
             throws IOException, JSONException {
-        GetMethod method = new GetMethod("http://" + host + ":" + port +
+        HttpGet method = new HttpGet("http://" + host + ":" + port +
                 "/gui/?list=1&token=" + token);
-        int executeMethod = client.executeMethod(method);
-        InputStream ins = method.getResponseBodyAsStream();
+        HttpResponse response = client.execute(method);
+        HttpEntity entity = response.getEntity();
+        String answer = EntityUtils.toString(entity);
+        /*InputStream ins = method.getResponseBodyAsStream();
         StringOutputStream os = new StringOutputStream();
         FileUtils.copy(ins, os);
-        String response = os.getString();
+        String answer = os.getString();
         ins.close();
-        os.close();
-        JSONObject jsonObj = new JSONObject(response);
+        os.close();*/
+        JSONObject jsonObj = new JSONObject(answer);
         JSONArray jsonArr = jsonObj.getJSONArray("torrents");
         int len = jsonArr.length();
         List<String> result = new LinkedList<String>();
@@ -88,16 +97,20 @@ public class uTorrent {
 
     public Collection<String> listDownloadingFiles()
             throws IOException, JSONException {
-        GetMethod method = new GetMethod("http://" + host + ":" + port +
+        HttpGet method = new HttpGet("http://" + host + ":" + port +
                 "/gui/?token=" + token + "&list=1");
-        int executeMethod = client.executeMethod(method);
+        HttpResponse response = client.execute(method);
+        HttpEntity entity = response.getEntity();
+        String answer = EntityUtils.toString(entity);
+        method.abort();
+        /*int executeMethod = client.executeMethod(method);
         InputStream ins = method.getResponseBodyAsStream();
         StringOutputStream os = new StringOutputStream();
         FileUtils.copy(ins, os);
-        String response = os.getString();
+        String answer = os.getString();
         ins.close();
-        os.close();
-        JSONObject jsonObj = new JSONObject(response);
+        os.close();*/
+        JSONObject jsonObj = new JSONObject(answer);
         JSONArray jsonArr = jsonObj.getJSONArray("torrents");
         int len = jsonArr.length();
         List<String> hashList = new LinkedList<String>();
@@ -111,14 +124,18 @@ public class uTorrent {
 
         List<String> result = new LinkedList<String>();
         for (String hash : hashList) {
-            method = new GetMethod("http://" + host + ":" + port
+            method = new HttpGet("http://" + host + ":" + port
                     + "/gui/?token=" + token + "&action=getfiles&hash=" + hash);
-            executeMethod = client.executeMethod(method);
+            /*executeMethod = client.executeMethod(method);
             ins = method.getResponseBodyAsStream();
             os = new StringOutputStream();
             FileUtils.copy(ins, os);
-            response = os.getString();
-            jsonObj = new JSONObject(response);
+            answer = os.getString();*/
+            response = client.execute(method);
+            entity = response.getEntity();
+            answer = EntityUtils.toString(entity);
+            method.abort();
+            jsonObj = new JSONObject(answer);
             jsonArr = jsonObj.getJSONArray("files");
             JSONArray inner = jsonArr.getJSONArray(1);
             len = inner.length();

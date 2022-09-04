@@ -23,7 +23,7 @@ import javax.xml.xpath.XPathExpressionException;
 import javax.xml.xpath.XPathFactory;
 import net.sourceforge.tuned.FileUtilities;
 import net.sourceforge.tuned.FileUtilities.ExtensionFileFilter;
-import org.apache.commons.httpclient.HttpException;
+import org.apache.http.HttpException;
 import org.json.JSONException;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;

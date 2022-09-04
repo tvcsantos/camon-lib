@@ -8,18 +8,43 @@ package pt.unl.fct.di.tsantos.util.io;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
-import pt.unl.fct.di.tsantos.util.ProgressListener;
+import java.util.LinkedList;
+import java.util.List;
+import org.apache.commons.exec.CommandLine;
+import org.apache.commons.exec.DefaultExecutor;
+import org.apache.commons.exec.ExecuteException;
+import org.apache.commons.exec.Executor;
+import org.apache.commons.exec.PumpStreamHandler;
+import org.apache.commons.exec.ShutdownHookProcessDestroyer;
 import pt.unl.fct.di.tsantos.util.exceptions.NotExecutableException;
+import pt.unl.fct.di.tsantos.util.swing.EventProducerUtilities;
+import pt.unl.fct.di.tsantos.util.swing.ProcessEvent;
+import pt.unl.fct.di.tsantos.util.swing.ProcessListener;
 
 /**
  *
  * @author tvcsantos
  */
 public class ExecutableFile extends File {
+    protected static final ShutdownHookProcessDestroyer destroyer;
+    protected static final Executor executor;
+
+    static {
+        destroyer = new ShutdownHookProcessDestroyer();
+        executor = new DefaultExecutor();
+        executor.setProcessDestroyer(destroyer);
+    }
+    
+    protected List<ProcessListener> listeners =
+            new LinkedList<ProcessListener>();
 
     private void checkExecutable() throws NotExecutableException {
         try {
-            Runtime.getRuntime().exec(getAbsolutePath());
+            Executor dummy = new DefaultExecutor();
+            dummy.setStreamHandler(
+                    new PumpStreamHandler(new StringOutputStream()));
+            dummy.execute(new CommandLine(this));
+            //Runtime.getRuntime().exec(getAbsolutePath());
         } catch (IOException ex) {
             String msg = ex.getMessage();
             NotExecutableException nex = 
@@ -55,65 +80,71 @@ public class ExecutableFile extends File {
         checkExecutable();
     }
 
-    public ExecutionResult execute(String[] args, 
-            final ProgressListener listener)
-            throws InterruptedException, IOException {
-        Runtime rt = Runtime.getRuntime();
-        String[] rargs = new String[args.length + 1];
-        rargs[0] = getAbsolutePath().toString();
-        System.arraycopy(args, 0, rargs, 1, args.length);
-        Process p = rt.exec(rargs);
-
-        String output = null;
-        String error = null;
-
-        final StreamGobbler errorGobbler =
-                new StreamGobbler(p.getErrorStream(), "ERROR");
-
-        final AbstractStreamGobbler outputGobbler =
-                new AbstractStreamGobbler(p.getInputStream(), "OUTPUT",
-                listener) {
-
-                    @Override
-                    public void parseLine(String line) {
-                        if (listener == null) {
-                            return;
-                        }
-                        if (line == null) {
-                            return;
-                        }
-                        line = line.trim();
-                        if (line.length() <= 0) {
-                            return;
-                        }
-                        if (line.contains("Progress")) {
-                            listener.reportProgress(Double.valueOf(
-                                 line.replace("Progress", "").replace(":", "").
-                                    replace("%", "").trim()).intValue());
-                            //listener.reportCurrentTask(getOutput());
-                        }
-                    }
-                };
-
-        // kick them off
-        errorGobbler.start();
-        outputGobbler.start();
-
-        // any error???
-        final int exitVal = p.waitFor();
-        System.out.println("ExitValue: " + exitVal);
-
-        output = outputGobbler.getOutput();
-        error = errorGobbler.getOutput();
-
-        return new ExecutionResult(exitVal, output, error);
+    private void notifyListenersProcessStart(ProcessEvent evt) {
+        EventProducerUtilities.notifyListeners(
+                listeners, "processStart", evt);
     }
 
-    public ExecutionResult execute(String[] args) 
-            throws InterruptedException, IOException {
-        return execute(args, null);
+    private void notifyListenersProcessFinish(ProcessEvent evt) {
+        EventProducerUtilities.notifyListeners(
+                listeners, "processFinish", evt);
     }
 
+    private void notifyListenersProcessInterrupt(ProcessEvent evt) {
+        EventProducerUtilities.notifyListeners(
+                listeners, "processInterrupt", evt);
+    }
+
+    private void notifyListenersProcessUpdate(ProcessEvent evt) {
+        EventProducerUtilities.notifyListeners(
+                listeners, "processUpdate", evt);
+    }
+
+    public ExecutionResult execute(String[] args)
+            throws ExecuteException, IOException {
+        try {
+            CommandLine cmdLine = new CommandLine(this);
+            cmdLine.addArguments(args);
+            MemLogOutputStream outsos = new MemLogOutputStream() {
+                @Override
+                protected void processLine(String line) {
+                    notifyListenersProcessUpdate(
+                            new ProcessEvent(ExecutableFile.this, line));
+                }
+            };
+            MemLogOutputStream errsos = new MemLogOutputStream() {
+                @Override
+                protected void processLine(String line) {
+                    notifyListenersProcessUpdate(
+                            new ProcessEvent(ExecutableFile.this, line));
+                }
+            };
+            executor.setStreamHandler(new PumpStreamHandler(outsos, errsos));
+            notifyListenersProcessStart(new ProcessEvent(this,
+                    "Executing " + this.getName() +
+                    " with the following command line: " + cmdLine));
+            int execute = executor.execute(cmdLine);
+            notifyListenersProcessFinish(new ProcessEvent(this,
+                    "Execution of " + cmdLine + " ended"));
+            return new ExecutionResult(execute, outsos.getString(),
+                    errsos.getString());
+        } catch(ExecuteException ex) {
+            notifyListenersProcessInterrupt(new ProcessEvent(this, ex));
+            throw ex;
+        } catch(IOException ex) {
+            notifyListenersProcessInterrupt(new ProcessEvent(this, ex));
+            throw ex;
+        }
+    }
+
+    public void addProcessListener(ProcessListener listener) {
+        listeners.add(listener);
+    }
+
+    public void removeListener(ProcessListener listener) {
+        listeners.remove(listener);
+    }
+   
     public class ExecutionResult {
         protected int exitCode;
         protected String output;

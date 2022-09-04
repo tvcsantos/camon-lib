@@ -9,7 +9,10 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import pt.unl.fct.di.tsantos.util.app.AppUtils;
+import pt.unl.fct.di.tsantos.util.collection.ArraysExtended;
+import pt.unl.fct.di.tsantos.util.exceptions.NotExecutableException;
 import pt.unl.fct.di.tsantos.util.exceptions.UnsupportedOSException;
+import pt.unl.fct.di.tsantos.util.io.ExecutableFile;
 
 /**
  *
@@ -20,7 +23,7 @@ public class ProgramDirectory {
     protected String propPathName;
     protected File path;
     protected String[] programs;
-
+    
     public ProgramDirectory(String dirName) {
         this(dirName, dirName.replaceAll(" ", "")
                 .toLowerCase().concat(".path"), null);
@@ -112,5 +115,23 @@ public class ProgramDirectory {
 
     protected String getOtherOS() throws UnsupportedOSException {
         throw new UnsupportedOSException();
+    }
+    
+    public ExecutableFile getProgram(String name)
+        throws NotExecutableException, FileNotFoundException,
+            UnsupportedOSException {
+        if (!ArraysExtended.contains(programs, name))
+            throw new FileNotFoundException(name + 
+                    " not found in this program directory");
+        File dir = getDirectory();
+        ExecutableFile res = null;
+        if (AppUtils.osIsWindows())
+            res = new ExecutableFile(dir, name + ".exe");
+        else if (AppUtils.osIsLinux() || AppUtils.osIsMac())
+            res = new ExecutableFile(dir, name);
+        else throw new UnsupportedOSException();
+        if (res == null || !res.exists() || !res.isFile())
+            throw new FileNotFoundException();
+        return res;
     }
 }

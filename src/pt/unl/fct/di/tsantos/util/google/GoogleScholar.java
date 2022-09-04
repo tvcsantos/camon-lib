@@ -1,6 +1,9 @@
 package pt.unl.fct.di.tsantos.util.google;
 
 
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.CookieStore;
 import pt.unl.fct.di.tsantos.util.swing.ProgressEvent;
 import pt.unl.fct.di.tsantos.util.swing.ProgressListener;
 import pt.unl.fct.di.tsantos.util.swing.EventProducerUtilities;
@@ -29,14 +32,16 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import net.htmlparser.jericho.Element;
 import net.htmlparser.jericho.Source;
-import org.apache.commons.httpclient.Cookie;
-import org.apache.commons.httpclient.HttpClient;
-import org.apache.commons.httpclient.HttpException;
-import org.apache.commons.httpclient.HttpStatus;
-import org.apache.commons.httpclient.cookie.CookiePolicy;
-import org.apache.commons.httpclient.methods.GetMethod;
-import org.apache.commons.httpclient.params.HttpMethodParams;
 import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.http.HttpException;
+import org.apache.http.HttpStatus;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.params.ClientPNames;
+import org.apache.http.client.params.CookiePolicy;
+import org.apache.http.cookie.Cookie;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.impl.cookie.BasicClientCookie;
+import org.apache.http.params.CoreProtocolPNames;
 import pt.unl.fct.di.tsantos.util.collection.ArraysExtended;
 import pt.unl.fct.di.tsantos.util.pdf.PDFUtilities;
 
@@ -79,15 +84,14 @@ public class GoogleScholar {
     }
     
     protected static GoogleScholar instance = null;
-    protected HttpClient client;
+    protected DefaultHttpClient client;
     protected List<ProgressListener> listeners;
 
     private GoogleScholar() {
-        client = new HttpClient();
-        client.getParams().setCookiePolicy(
+        client = new DefaultHttpClient();
+        client.getParams().setParameter(ClientPNames.COOKIE_POLICY,
                 CookiePolicy.BROWSER_COMPATIBILITY);
-        client.getParams().setParameter(
-                HttpMethodParams.USER_AGENT,
+        client.getParams().setParameter(CoreProtocolPNames.USER_AGENT,
                 "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/535.1 "
                 + "(KHTML, like Gecko) Chrome/14.0.835.202 Safari/535.1");
         cookieSet = false;
@@ -153,7 +157,8 @@ public class GoogleScholar {
         return q;
     }
 
-    protected GoogleScholarResult processFile(File file) throws IOException {
+    protected GoogleScholarResult processFile(File file) 
+            throws IOException, HttpException {
         String p = PDFUtilities.pdfToText(file, 10);
         String p_head = substring(p, 0, 999);
         Matcher m = Pattern.compile("(.*?)((abstract)|(introduction))",
@@ -224,18 +229,26 @@ public class GoogleScholar {
         listeners.add(listener);
     }
 
-    protected List<GoogleScholarResult> search(String query)
-            throws IOException {
+    public List<GoogleScholarResult> search(String query)
+            throws IOException, HttpException {
+        return search(query, false);
+    }
+
+    public List<GoogleScholarResult> search(String query, boolean intitle)
+            throws IOException, HttpException {
         List<GoogleScholarResult> gslist =
                 new LinkedList<GoogleScholarResult>();
         setScholarCookie();
-        GetMethod method = new GetMethod(
-                String.format(SEARCH_URL, URLEncoder.encode(query, "UTF-8")));
-        int statusCode = client.executeMethod(method);
+        HttpGet method = new HttpGet(
+            String.format(SEARCH_URL, URLEncoder.encode(intitle ?
+                String.format("intitle:\"%s\"", query) : query, "UTF-8")));
+        HttpResponse response = client.execute(method);
+        int statusCode = response.getStatusLine().getStatusCode();
         if (statusCode != HttpStatus.SC_OK) {
             throw new HttpException("Method failed with status " + statusCode);
         }
-        InputStream is = method.getResponseBodyAsStream();
+        HttpEntity entity = response.getEntity();
+        InputStream is = entity.getContent();
         Source source = new Source(is);
         source.setLogger(null);
         source.fullSequentialParse();
@@ -294,15 +307,17 @@ public class GoogleScholar {
                     String url = ref.getAttributeValue("href");
                     try {
                         URL bibtexURL = new URL(new URL(HOME_URL), url);
-                        GetMethod bmethod = new GetMethod(bibtexURL.toString());
-                        statusCode = client.executeMethod(bmethod);
+                        HttpGet bmethod = new HttpGet(bibtexURL.toString());
+                        HttpResponse bresponse = client.execute(bmethod);
+                        statusCode = bresponse.getStatusLine().getStatusCode();
                         if (statusCode != HttpStatus.SC_OK) {
                             throw new HttpException(
                                     "Method failed with status " + statusCode);
                         }
+                        HttpEntity bentity = bresponse.getEntity();
                         new BibtexParser(false).parse(bfile,
                                 new InputStreamReader(
-                                bmethod.getResponseBodyAsStream()));
+                                bentity.getContent()));
                         Iterator<BibtexAbstractEntry> it =
                                 bfile.getEntries().iterator();
                         //TODO: fix this for better efficience
@@ -313,7 +328,7 @@ public class GoogleScholar {
                                 //break;
                             }
                         }
-                        bmethod.releaseConnection();
+                        bmethod.abort();
                     } catch (ParseException ex) {
                     } catch (MalformedURLException ex) {
                     }
@@ -323,18 +338,18 @@ public class GoogleScholar {
             gslist.add(new GoogleScholarResult(title, authors, text, bibtex));
             //System.out.println(e.toString());
         }
-        method.releaseConnection();
+        method.abort();
         return gslist;
     }
 
     public Map<File, GoogleScholarResult> search(File... files)
-            throws IOException {
+            throws IOException, HttpException {
         List<File> asList = Arrays.asList(files);
         return search(asList);
     }
 
     public Map<File, GoogleScholarResult> search(Collection<File> files)
-            throws IOException {
+            throws IOException, HttpException {
         EventProducerUtilities.notifyListeners(
                 listeners, "progressStart", new ProgressEvent(this));
         Map<File, GoogleScholarResult> res =
@@ -352,6 +367,10 @@ public class GoogleScholar {
                         "progressInterrupt", new ProgressEvent(this));
                 throw e;
                 //break;
+            } catch(HttpException e) {
+                EventProducerUtilities.notifyListeners(listeners, 
+                        "progressInterrupt", new ProgressEvent(this));
+                throw e;
             }
             
         }
@@ -362,16 +381,20 @@ public class GoogleScholar {
     }
 
     private void setScholarCookie()
-            throws IOException {
+            throws IOException, HttpException {
         if (cookieSet) return;
-        GetMethod method = new GetMethod(HOME_URL);
-        int statusCode = client.executeMethod(method);
+        HttpGet method = new HttpGet(HOME_URL);
+        HttpResponse response = client.execute(method);
+        int statusCode = response.getStatusLine().getStatusCode();
         if (statusCode != HttpStatus.SC_OK) {
             throw new HttpException("Method failed with status " + statusCode);
         }
-        Cookie[] cookies = client.getState().getCookies();
-        for (int i = 0; i < cookies.length; i++) {
-            Cookie cookie = cookies[i];
+        CookieStore cookieStore = client.getCookieStore();
+        List<Cookie> cookies = cookieStore.getCookies();
+        /*Cookie[] cookies = client.getState().getCookies();*/
+        for (Cookie cookie : cookies) {
+        //for (int i = 0; i < cookies.length; i++) {
+            //Cookie cookie = cookies[i];
             /*System.err.println(
             "Cookie: " + cookie.getName() +
             ", Value: " + cookie.getValue() +
@@ -379,10 +402,12 @@ public class GoogleScholar {
             ", Expiry Date: " + cookie.getExpiryDate() +
             ", Comment: " + cookie.getComment());*/
             if (cookie.getName().equals("GSP")) {
-                cookie.setValue("CF=4:" + cookie.getValue());
+                ((BasicClientCookie)cookie).setValue(
+                        "CF=4:" + cookie.getValue());
+                //cookieStore.addCookie(cookie);
             }
         }
-        method.releaseConnection();
+        method.abort();//releaseConnection();
         cookieSet = true;
     }
 

@@ -118,6 +118,153 @@ public class StringUtils {
         return stringToHTML(s, Integer.MAX_VALUE, bold, emph);
     }
 
+    public static String latexStringToHTML(String s) {
+        return latexStringToHTML(s, false, false);
+    }
+
+    public static String latexStringToHTML(String s, int max) {
+        return latexStringToHTML(s, max, false, false);
+    }
+
+    public static String latexStringToHTML(String s, boolean bold, boolean emph) {
+        return latexStringToHTML(s, Integer.MAX_VALUE, bold, emph);
+    }
+
+    /*public static String convertLaTeXToHTML(String s) {
+        Matcher m = Pattern.compile("\\$(.*)\\$").matcher(s);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            //System.out.println(m.group(1));
+            String g = m.group(1);
+            g = g.replaceAll("\\\\pi", "&pi;");
+            m.appendReplacement(sb, "<span class=\"math\">" + g + "</span>");
+        }
+        m.appendTail(sb);
+        s = sb.toString();
+        //System.out.println(s);
+        return s;
+    }*/
+
+    public static String convertLaTeXToHTML(String data) {
+        String doll = "math";
+        String vect = "vector";
+        /*String subscr = "subscript";
+        String superscr = "superscript";*/
+        //replace dollar signs with SPAN math
+        String out = data.replaceAll("\\$(.*?)\\$",
+                "<span class=\"" + doll + "\">$1</span>");
+
+        //replace vectors with B tag
+        out = out.replaceAll("\\\\vec\\{(.+?)\\}",
+                "<span class=\"" + vect + "\">$1</span>");
+        //\hat{} vectors
+        out = out.replaceAll("\\\\hat\\{(.+?)\\}", "<b>$1</b>");
+        //chapter to TITLE
+        out = out.replaceAll("\\\\chapter\\{(.+)\\}", "TITLE: $1");
+        //remove index listing
+        out = out.replaceAll("\\\\index\\{(.+)\\}", "");
+        //remove 'fig:', 'eq:' from refs and labels
+        out = out.replaceAll("\\{fig:(.+)\\}", "\\{$1\\}");
+        out = out.replaceAll("\\{eq:(.+)\\}", "\\{$1\\}");
+        //REF usage
+        out = out.replaceAll("\\\\ref\\{(.+)\\}", "<a href=\"#$1\">this</a>");
+        out = out.replaceAll("\\\\eqref\\{(.+)\\}", "<a href=\"#$1\">this</a>");
+        //figures
+        out = out.replaceAll("\\\\begin\\{figure\\}\\[.+\\]\\s+\\\\centering"
+                + "\\s+\\\\includegraphics\\[.+\\]\\{(.+)\\}",
+                "<div align=\"center\">\\{mosimage\\} NAME: $1");
+        out = out.replaceAll("\\\\end\\{figure\\}", "</div>");
+        //all LABLES become <a name=
+        out = out.replaceAll("\\\\label\\{(.+)\\}",
+                "<a name=\"$1\">&nbsp;</a>");
+        //equation arrays
+        out = out.replaceAll("\\\\bea", "<div align=\"center\">{mosimage}");
+        out = out.replaceAll("\\\\eea", "</div>");
+        //subscripts and superscripts
+        /*out = out.replaceAll("_(\\w)",
+            "<span class=\""+subscr+"\">$1</span>"); //no curly braces
+        out = out.replaceAll("_\\{(\\w+?)\\}",
+            "<span class=\""+subscr+"\">$1</span>");
+        out = out.replaceAll("\\^(\\w)",
+            "<span class=\""+superscr+"\">$1</span>");  //no curly braces
+        out = out.replaceAll("\\^\\{(\\w+?)\\}",
+            "<span class=\""+superscr+"\">$1</span>");*/
+        out = out.replaceAll("_(\\w)", "<sub>$1</sub>"); //no curly braces
+        out = out.replaceAll("_\\{(\\w+?)\\}", "<sub>$1</sub>");
+        out = out.replaceAll("\\^(\\w)", "<sup>$1</sup>");  //no curly braces
+        out = out.replaceAll("\\^\\{(\\w+?)\\}", "<sup>$1</sup>");
+
+        //remove math spaces
+        out = out.replaceAll("\\\\;", "");
+
+        //math characters
+        out = out.replaceAll("\\\\cdot", "&middot;");
+        out = out.replaceAll("\\\\ln", "ln");
+
+        //greek letters case insensitive
+        out = out.replaceAll("\\\\phi", "&Phi;"); //always use Phi in html
+        out = out.replaceAll("\\\\(a)lpha", "&$1lpha;");
+        out = out.replaceAll("\\\\(b)eta", "&$1eta;");
+        out = out.replaceAll("\\\\(g)amma", "&$1amma;");
+        out = out.replaceAll("\\\\(d)elta", "&$1elta;");
+        out = out.replaceAll("\\\\(e)psilon", "&$1psilon;");
+        out = out.replaceAll("\\\\(z)eta", "&$1eta;");
+        out = out.replaceAll("\\\\(e)ta", "&$1ta;");
+        out = out.replaceAll("\\\\(t)heta", "&$1heta;");
+        out = out.replaceAll("\\\\(i)ota", "&$1ota;");
+        out = out.replaceAll("\\\\(k)appa", "&$1appa;");
+        out = out.replaceAll("\\\\(l)ambda", "&$1ambda;");
+        out = out.replaceAll("\\\\(m)u", "&$1u;");
+        out = out.replaceAll("\\\\(n)u", "&$1u;");
+        out = out.replaceAll("\\\\(x)i", "&$1i;");
+        out = out.replaceAll("\\\\(o)micron", "&$1micron;");
+        out = out.replaceAll("\\\\(p)i", "&$1i;");
+        out = out.replaceAll("\\\\(r)ho", "&$1ho;");
+        out = out.replaceAll("\\\\(s)igma", "&$1igma;");
+        out = out.replaceAll("\\\\(t)au", "&$1au;");
+        out = out.replaceAll("\\\\(u)psilon", "&$1psilon;");
+        out = out.replaceAll("\\\\(c)hi", "&$1hi;");
+        out = out.replaceAll("\\\\(p)si", "&$1si;");
+        out = out.replaceAll("\\\\(o)mega", "&$1mega;");
+
+        //<p> throughout, but only for double line-returns
+        //out = out.replaceAll(/\n{2}/g,"</p>\n\n<p>");
+        //out = out.replaceAll(/<\/p>/,""); //remove initial closing tag*/
+        return out;
+    }
+
+
+    public static String latexStringToHTML(String s, int max, boolean bold,
+            boolean emph) {
+        List<String> words = getWords(s);
+        for (String w : words) if (w.length() > max) max = w.length();
+        int length = 0;
+        String res = "<html>" + (bold ? "<b>" : "") + (emph ? "<i>" : "");
+        Iterator<String> it = words.iterator();
+        if (it.hasNext()) {
+            String w = it.next();
+            res += convertLaTeXToHTML(w);
+            length += w.length();
+        }
+        int breaks = 0;
+        while (it.hasNext()) {
+            String w = it.next();
+            if (length + 1 + w.length() > max) {
+                if (breaks >= 2) {
+                    res += " ...";
+                    break;
+                }
+                res += "<br>" + convertLaTeXToHTML(w);
+                length = w.length();
+                breaks++;
+            } else {
+                res += " " + convertLaTeXToHTML(w);
+                length += 1 + w.length();
+            }
+        }
+        return res;
+    }
+
     public static String stringToHTML(String s, int max, boolean bold,
             boolean emph) {
         List<String> words = getWords(s);
@@ -218,6 +365,7 @@ public class StringUtils {
     	"\\{?\\\\k\\{?a\\}?\\}?",
     	"\\{?\\\\k\\{?A\\}?\\}?",
     	"\\{?\\\\l\\}?",
+        "\\{?\\\\o\\}?",
         "\\\\#"
     };
     
@@ -225,13 +373,15 @@ public class StringUtils {
     	"\u0328a",
     	"\u0328A",
     	"\u0142",
+        "\u00F8",
         "#"
     };
     
     static String[] SPECIALREREP = new String[] {
     	"\\\\k{a}",
     	"\\\\k{A}",
-    	"\\\\{\\\\l}",
+    	"{\\\\l}",
+        "{\\\\o}",
         "\\#"
     };
     

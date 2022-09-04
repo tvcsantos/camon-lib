@@ -1,5 +1,6 @@
 package pt.unl.fct.di.tsantos.util.download.subtitile;
 
+import java.net.URI;
 import java.util.Set;
 import pt.unl.fct.di.tsantos.util.exceptions.UnsupportedFormatException;
 import com.sun.syndication.feed.synd.SyndEntry;
@@ -17,7 +18,6 @@ import java.util.StringTokenizer;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.apache.commons.httpclient.URI;
 import pt.unl.fct.di.tsantos.util.Pair;
 import pt.unl.fct.di.tsantos.util.net.RSSFeed;
 import static pt.unl.fct.di.tsantos.util.download.subtitile.Language.*;
@@ -182,7 +182,8 @@ public class TVSubtitlesDownloader extends RSSSubtitleDownloader {
             // should be http://.../files/Greys%20Anatomy_7x12_HDTV.LOL.pt.zip
         }
         downloadURL = s;
-        downloadURL = new URI(downloadURL, false).toString();
+        //downloadURL = new URI(downloadURL, false).toString();
+        downloadURL = URI.create(downloadURL).toString();
         //if (iss != null) iss.close();
         int j = s.lastIndexOf('/');
         String downFileName = s.substring(j + 1);
@@ -214,7 +215,7 @@ public class TVSubtitlesDownloader extends RSSSubtitleDownloader {
         URLConnection conn = new URL(downloadURL).openConnection();
         InputStream ris = conn.getInputStream();
         String s = conn.getURL().toString();
-        s = URLDecoder.decode(s);
+        s = URLDecoder.decode(s,"UTF-8");
         int j = s.lastIndexOf('/');
         String downFileName = s.substring(j + 1);
         //j = downFileName.lastIndexOf('.');

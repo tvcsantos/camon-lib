@@ -174,7 +174,7 @@ public class AppUtils {
 
     public static String whereIs(String prog) 
             throws IOException, UnsupportedOSException {
-        if (!osIsLinux() || !osIsMac())
+        if (!osIsLinux() && !osIsMac())
             throw new UnsupportedOSException();
         //if (AppUtils.osIsWindows()) return null;
         Process proc = null;

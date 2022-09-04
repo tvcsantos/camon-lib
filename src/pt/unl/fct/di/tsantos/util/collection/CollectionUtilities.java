@@ -114,4 +114,8 @@ public class CollectionUtilities {
         }
         return sets;
     }
+
+    public static <T> void copyInto(Collection<T> collection, T[] array) {
+        int i = 0; for(T elem : collection) array[i++] = elem;
+    }
 }

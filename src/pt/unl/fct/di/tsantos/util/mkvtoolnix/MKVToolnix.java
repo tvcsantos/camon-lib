@@ -1,8 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
-
 package pt.unl.fct.di.tsantos.util.mkvtoolnix;
 
 import java.io.BufferedReader;
@@ -10,76 +5,56 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.StringReader;
-import pt.unl.fct.di.tsantos.util.io.ExecutableFile;
+import org.apache.commons.exec.ExecuteException;
 import pt.unl.fct.di.tsantos.util.Properties;
-import pt.unl.fct.di.tsantos.util.app.AppUtils;
 import pt.unl.fct.di.tsantos.util.exceptions.NotExecutableException;
 import pt.unl.fct.di.tsantos.util.exceptions.UnsupportedOSException;
+import pt.unl.fct.di.tsantos.util.io.ExecutableFile;
 
 /**
  *
  * @author tvcsantos
  */
-public class MKVToolnix {
-    private static File path;
-    private static ExecutableFile mkvmerge;
-    private static ExecutableFile mkvinfo;
-    private static ExecutableFile mkvextract;
-
+public class MKVToolnix extends ProgramDirectory {
+    protected ExecutableFile mkvmerge;
+    protected ExecutableFile mkvinfo;
+    protected ExecutableFile mkvextract;
+    
+    protected static MKVToolnix instance;
+    
+    public static MKVToolnix getInstance() {
+        if (instance == null) 
+            instance = new MKVToolnix();
+        return instance;
+    }
+    
     private MKVToolnix() {
-        throw new UnsupportedOperationException();
+        super("mkvtoolnix", new String[]{ "mkvinfo", 
+            "mkvmerge", "mkvextract" });
     }
-
-    public static File getPath()
-            throws FileNotFoundException, UnsupportedOSException {
-        if (path == null) {
-            ProgramDirectory pd =
-                new ProgramDirectory("mkvtoolnix", new String[]{ "mkvmerge" });
-            path = pd.getDirectory();
-        }
-        return path;
-    }
-
-    /**
-     * Merge multimedia streams into a Matroska™ file
-     */
-    public static ExecutableFile getMKVMerge() 
-            throws NotExecutableException, FileNotFoundException,
-            UnsupportedOSException {
-        if (mkvmerge == null) mkvmerge = getProgram("mkvmerge");
-        return mkvmerge;
-    }
-
-    public static ExecutableFile getMKVInfo()
-            throws NotExecutableException, FileNotFoundException,
-            UnsupportedOSException {
-        if (mkvinfo == null) mkvinfo = getProgram("mkvinfo");
+    
+    public ExecutableFile getMKVInfo() throws NotExecutableException, 
+            FileNotFoundException, UnsupportedOSException {
+        if (mkvinfo == null)
+            mkvinfo = getProgram("mkvinfo");
         return mkvinfo;
     }
-
-    public static ExecutableFile getMKVExtract()
-            throws NotExecutableException, FileNotFoundException,
-            UnsupportedOSException {
-        if (mkvextract == null) mkvextract = getProgram("mkvextract");
+    
+    public ExecutableFile getMKVMerge() throws NotExecutableException, 
+            FileNotFoundException, UnsupportedOSException {
+        if (mkvmerge == null)
+            mkvmerge = getProgram("mkvmerge");
+        return mkvmerge;
+    }
+    
+    public ExecutableFile getMKVExtract() throws NotExecutableException, 
+            FileNotFoundException, UnsupportedOSException {
+        if (mkvextract == null)
+            mkvextract = getProgram("mkvextract");
         return mkvextract;
     }
-
-    private static ExecutableFile getProgram(String name)
-        throws NotExecutableException, FileNotFoundException,
-            UnsupportedOSException {
-        File dir = MKVToolnix.getPath();
-        ExecutableFile res = null;
-        if (AppUtils.osIsWindows())
-            res = new ExecutableFile(dir, name + ".exe");
-        else if (AppUtils.osIsLinux() || AppUtils.osIsMac())
-            res = new ExecutableFile(dir, name);
-        else throw new UnsupportedOSException();
-        if (res == null || !res.exists() || !res.isFile())
-            throw new FileNotFoundException();
-        return res;
-    }
-
-     private static int getLevel(String line) {
+    
+    private static int getLevel(String line) {
         int index = line.indexOf("+");
         if (index < 0) {
             return -1;
@@ -93,9 +68,9 @@ public class MKVToolnix {
         }
     }
 
-    public static Properties getMKVInfoProperties(File source)
-            throws IOException, InterruptedException,
-            NotExecutableException, FileNotFoundException,
+    public Properties getMKVInfoProperties(File source)
+            throws IOException, NotExecutableException, 
+            FileNotFoundException, ExecuteException,
             UnsupportedOSException {
         if (source == null) {
             throw new NullPointerException("file must be non null");
@@ -109,8 +84,8 @@ public class MKVToolnix {
         ExecutableFile execFile = getMKVInfo();
 
         ExecutableFile.ExecutionResult res = execFile.execute(
-                new String[]{ "\"" + source.getAbsolutePath() + "\"" });
-        
+                new String[]{"\"" + source.getAbsolutePath() + "\""});
+
         if (res.getExitCode() != 0) {
             return null;
         }
@@ -161,33 +136,13 @@ public class MKVToolnix {
         }
         return root;
     }
-
-    public static void main(String[] args) 
-            throws FileNotFoundException, IOException, 
-            InterruptedException, UnsupportedOSException, NotExecutableException {
-        System.setProperty("mkvtoolnix.path",
-                new File("D:\\Programs\\AudioConverter\\Tools\\mkvtoolnix")
-                .getAbsolutePath());
-        System.out.println(MKVToolnix.getPath());
-        /*System.out.println(MKVToolnix.getMKVInfoProperties(
-                new File("D:\\Media\\"
-                + "Burn.Notice.S05E09.720p.HDTV.X264-DIMENSION.mkv")).toFormatedString());*/
-        /*String[] res = MKVToolnix.getMKVExtract().exec(new String[]{"-M", "--compression", "-1:none",
-        "D:\\Media\\Shows\\Burn.Notice.S05E08.720p.HDTV.X264-DIMENSION.mkv",
-        "-o","D:\\test.mkv", "--language", "0:por", "--compression", "0:none",
-        "D:\\Media\\Shows\\Burn.Notice.S05E08.720p.HDTV.X264-DIMENSION.srt"
-        }, new ProgressListener() {
-
-            public void reportProgress(int progress) {
-                System.out.println(progress);
-            }
-
-            public void reportCurrentTask(String taskDescription) {
-                //throw new UnsupportedOperationException("Not supported yet.");
-            }
-        });
-        if (res != null) for (String r : res) System.out.println(r);*/
-        System.out.println(AppUtils.osIs64bits());
-
+       
+    public static void main(String[] args) throws IOException, 
+            NotExecutableException, FileNotFoundException, ExecuteException, 
+            UnsupportedOSException {
+        MKVToolnix mkvtoolnix = MKVToolnix.getInstance();
+        Properties mKVInfoProperties = mkvtoolnix.getMKVInfoProperties(
+                new File("/media/KINGSTON/WD/ksample/IronMan.mkv"));
+        System.out.println(mKVInfoProperties.toFormatedString());
     }
 }

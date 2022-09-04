@@ -1,40 +1,41 @@
 package pt.unl.fct.di.tsantos.util.download.subtitile;
 
-import java.util.Set;
-import pt.unl.fct.di.tsantos.util.exceptions.UnsupportedFormatException;
-import pt.unl.fct.di.tsantos.util.exceptions.UnsupportedLanguageException;
-import pt.unl.fct.di.tsantos.util.FileUtils;
 import com.sun.syndication.feed.synd.SyndContent;
 import com.sun.syndication.feed.synd.SyndEntry;
+import net.htmlparser.jericho.Element;
+import net.htmlparser.jericho.Source;
+import net.htmlparser.jericho.StartTag;
+import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.commons.lang.StringUtils;
+import org.apache.http.Header;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.message.BasicNameValuePair;
+import org.apache.http.util.EntityUtils;
+import pt.unl.fct.di.tsantos.util.Pair;
+import pt.unl.fct.di.tsantos.util.exceptions.UnsupportedFormatException;
+import pt.unl.fct.di.tsantos.util.exceptions.UnsupportedLanguageException;
+import pt.unl.fct.di.tsantos.util.math.Distance;
+import pt.unl.fct.di.tsantos.util.net.RSSFeed;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.SortedSet;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import net.htmlparser.jericho.Element;
-import net.htmlparser.jericho.Source;
-import net.htmlparser.jericho.StartTag;
-import org.apache.commons.httpclient.Header;
-import org.apache.commons.httpclient.HttpClient;
-import org.apache.commons.httpclient.HttpMethod;
-import org.apache.commons.httpclient.NameValuePair;
-import org.apache.commons.httpclient.URI;
-import org.apache.commons.httpclient.methods.GetMethod;
-import org.apache.commons.httpclient.methods.PostMethod;
-import org.apache.commons.lang.StringEscapeUtils;
-import org.apache.commons.lang.StringUtils;
-import pt.unl.fct.di.tsantos.util.Pair;
-import pt.unl.fct.di.tsantos.util.net.RSSFeed;
-import pt.unl.fct.di.tsantos.util.math.Distance;
-import pt.unl.fct.di.tsantos.util.io.StringOutputStream;
+
 import static pt.unl.fct.di.tsantos.util.download.subtitile.Language.*;
 
 public class Addic7edSubtitleDownloader extends MultipleSubtitleDownloader {
@@ -150,19 +151,19 @@ public class Addic7edSubtitleDownloader extends MultipleSubtitleDownloader {
     private class Addic7edRSSSubtitleDownloader extends RSSSubtitleDownloader {
 
         protected final HttpClient client;
-        protected HttpMethod currentMethod;
+        protected HttpUriRequest currentMethod;
 
         public Addic7edRSSSubtitleDownloader(List<String> fileNames,
                 Set<Language> langs, File saveDirectory,
                 String user, String password) {
             super(fileNames, langs, saveDirectory, user, password);
-            this.client = new HttpClient();
+            this.client = new DefaultHttpClient();
         }
 
         public Addic7edRSSSubtitleDownloader(List<String> fileNames,
                 File saveDirectory, String user, String password) {
             super(fileNames, saveDirectory, user, password);
-            this.client = new HttpClient();
+            this.client = new DefaultHttpClient();
         }
 
         @Override
@@ -224,14 +225,15 @@ public class Addic7edSubtitleDownloader extends MultipleSubtitleDownloader {
         protected InputStream getDownloadInputStream(SubtitleDescriptor si)
                 throws IOException {
             String downloadURL = si.getSubDownloadLink();
-            currentMethod = new GetMethod(downloadURL);
+            currentMethod = new HttpGet(downloadURL);
             return getStream(this, client, currentMethod, si);
         }
 
         @Override
         protected void postDownloadSubtitle() throws IOException {
             super.postDownloadSubtitle();
-            if (currentMethod != null) currentMethod.releaseConnection();
+            //if (currentMethod != null) currentMethod.releaseConnection();
+            if (currentMethod != null) currentMethod.abort();
             currentMethod = null;
         }
 
@@ -270,19 +272,19 @@ public class Addic7edSubtitleDownloader extends MultipleSubtitleDownloader {
     private class Addic7edHTMLSubtitleDownloader extends SubtitleDownloader {
 
         protected final HttpClient client;
-        protected HttpMethod currentMethod;
+        protected HttpUriRequest currentMethod;
 
         public Addic7edHTMLSubtitleDownloader(List<String> fileNames,
                 Set<Language> langs, File saveDirectory,
                 String user, String password) {
             super(fileNames, langs, saveDirectory, user, password);
-            this.client = new HttpClient();
+            this.client = new DefaultHttpClient();
         }
 
         public Addic7edHTMLSubtitleDownloader(List<String> fileNames,
                 File saveDirectory, String user, String password) {
             super(fileNames, saveDirectory, user, password);
-            this.client = new HttpClient();
+            this.client = new DefaultHttpClient();
         }
 
         @Override
@@ -316,14 +318,16 @@ public class Addic7edSubtitleDownloader extends MultipleSubtitleDownloader {
                     thisProps.getEpisodes().first() + "/" +
                     getCodeForLang(lang);
 
-            HttpMethod m = new GetMethod(link);
-            client.executeMethod(m);
-            InputStream ins = m.getResponseBodyAsStream();
+            HttpGet m = new HttpGet(link);
+            HttpResponse response = client.execute(m);
+            HttpEntity entity = response.getEntity();
+            /*InputStream ins = entity.getContent();
             StringOutputStream os = new StringOutputStream();
             FileUtils.copy(ins, os);
             String body = os.getString();
             ins.close();
-            os.close();
+            os.close();*/
+            String body = EntityUtils.toString(entity);
             if (body.contains("Couldn't find any subs with the specified"
                     + " language. Filter ignored"))
                 return null;
@@ -373,31 +377,33 @@ public class Addic7edSubtitleDownloader extends MultipleSubtitleDownloader {
         protected InputStream getDownloadInputStream(SubtitleDescriptor si)
                 throws IOException {
             String downloadURL = si.getSubDownloadLink();
-            currentMethod = new GetMethod(downloadURL);
+            currentMethod = new HttpGet(downloadURL);
             return getStream(this, client, currentMethod, si);
         }
 
         @Override
         protected void postDownloadSubtitle() throws IOException {
             super.postDownloadSubtitle();
-            if (currentMethod != null) currentMethod.releaseConnection();
+            //if (currentMethod != null) currentMethod.releaseConnection();
+            if (currentMethod != null) currentMethod.abort();
             currentMethod = null;
         }
 
     }
 
     private static InputStream getStream(SubtitleDownloader sd,
-            HttpClient client, HttpMethod method,
+            HttpClient client, HttpUriRequest method,
             SubtitleDescriptor si) throws IOException {
         String downFileName = null;
-        client.executeMethod(method);
+        HttpResponse response = client.execute(method);
+        HttpEntity entity = response.getEntity();
         URI uri = method.getURI();
         if (uri.getPath().compareTo("/downloadexceeded.php") == 0) {
             sd.getLogger().warning(sd.getClass().getName() +
                     " download exceeded!");
             return null;
         }
-        Header h = method.getResponseHeader("Content-Disposition");
+        Header h = response.getFirstHeader("Content-Disposition");
         String v = h.getValue();
         Matcher m = Pattern.compile(".*filename=\\\"(.*)\\\"",
                 Pattern.DOTALL).matcher(v);
@@ -405,51 +411,63 @@ public class Addic7edSubtitleDownloader extends MultipleSubtitleDownloader {
             downFileName = m.group(1).trim();
         }
         si.setDownFileName(downFileName);
-        return method.getResponseBodyAsStream();
+        return entity.getContent();
     }
 
     private static void login(HttpClient client, String user, String password)
             throws IOException {
-        GetMethod getPage = new GetMethod(WEBURL);
+        HttpGet getPage = new HttpGet(WEBURL);
 
-        client.executeMethod(getPage);
+        client.execute(getPage);
 
-        getPage.releaseConnection();
+        //getPage.releaseConnection();
+        getPage.abort();
 
-        PostMethod postLogin = new PostMethod();
-        postLogin.setURI(new URI(new URI(WEBURL + "/login.php"),
-                "dologin.php"));
+        HttpPost postLogin = new HttpPost();
+        postLogin.setURI(URI.create(WEBURL + "/dologin.php"));
+   
+        /*postLogin.setURI(new URI(new URI(WEBURL + "/login.php"),
+                "dologin.php"));*/
 
-        NameValuePair[] data = {
-            new NameValuePair("username", user),
-            new NameValuePair("password", password)
-        };
+        /*NameValuePair[] data = {
+            new BasicNameValuePair("username", user),
+            new BasicNameValuePair("password", password)
+        };*/
+        
+        List<NameValuePair> list = new LinkedList<NameValuePair>();
+        list.add(new BasicNameValuePair("username", user));
+        list.add(new BasicNameValuePair("password", password));
+        
+        UrlEncodedFormEntity newentity = new UrlEncodedFormEntity(list);
 
-        postLogin.setRequestBody(data);
-
-        client.executeMethod(postLogin);
-
-        InputStream ins = postLogin.getResponseBodyAsStream();
+        postLogin.setEntity(newentity);
+        //postLogin.setRequestBody(data);
+        HttpResponse response = client.execute(postLogin);
+        /*InputStream ins = postLogin.getResponseBodyAsStream();
         StringOutputStream os = new StringOutputStream();
         FileUtils.copy(ins, os);
         String response = os.getString();
         ins.close();
-        os.close();
+        os.close();*/
         //String response = postLogin.getResponseBodyAsString();
+        HttpEntity entity = response.getEntity();
+        String answer = EntityUtils.toString(entity);
 
-        postLogin.releaseConnection();
+        //postLogin.releaseConnection();
+        postLogin.abort();
 
-        if (response.contains("Wrong password"))
+        if (answer.contains("Wrong password"))
             throw new IOException("Cannot login. Incorrect password");
-        else if (response.contains(
+        else if (answer.contains(
                 "User <b>" + user + "</b> doesn't exist"))
             throw new IOException("Cannot login. Incorrect username");        
     }
 
     private static void logout(HttpClient client) throws IOException {
-        GetMethod logoutPage = new GetMethod(WEBURL + "/logout.php");
-        client.executeMethod(logoutPage);
-        logoutPage.releaseConnection();
+        HttpGet logoutPage = new HttpGet(WEBURL + "/logout.php");
+        client.execute(logoutPage);
+        //logoutPage.releaseConnection();
+        logoutPage.abort();
     }
 
     private static List<Pair<SubtitleAttributes, SubtitleDescriptor>>

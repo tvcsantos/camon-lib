@@ -1,15 +1,20 @@
 package pt.unl.fct.di.tsantos.util.thetvdb;
 
+import org.apache.http.HttpStatus;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.client.HttpClient;
+import org.apache.http.HttpException;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -26,13 +31,10 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
-import javax.xml.parsers.DocumentBuilder;
 
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
-import javax.xml.stream.XMLStreamWriter;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
@@ -40,20 +42,14 @@ import javax.xml.xpath.XPathFactory;
 import net.sourceforge.tuned.FileUtilities;
 import net.sourceforge.tuned.FilterIterator;
 
-import org.apache.commons.httpclient.HttpClient;
-import org.apache.commons.httpclient.HttpException;
-import org.apache.commons.httpclient.HttpStatus;
-import org.apache.commons.httpclient.methods.GetMethod;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
-import pt.unl.fct.di.tsantos.util.collection.CollectionUtilities;
 import pt.unl.fct.di.tsantos.util.download.subtitile.SubtitleAttributes;
 import pt.unl.fct.di.tsantos.util.exceptions.UnsupportedFormatException;
 import pt.unl.fct.di.tsantos.util.xml.XMLDocumentWriter;
 import pt.unl.fct.di.tsantos.util.xml.XMLUtilities;
-import static pt.unl.fct.di.tsantos.util.xml.XMLUtilities.*;
 
 public class TheTVDBSearch {
 
@@ -84,11 +80,13 @@ public class TheTVDBSearch {
         seriesName = seriesName.replaceAll(" ", "+");
         String request = "http://www.thetvdb.com/api/GetSeries.php?seriesname="
                 + seriesName;
-        HttpClient client = new HttpClient();
-        GetMethod method = new GetMethod(request);
+        HttpClient client = new DefaultHttpClient();
+        HttpGet method = new HttpGet(request);
 
         // Send GET request
-        int statusCode = client.executeMethod(method);
+        HttpResponse response = client.execute(method);
+        HttpEntity entity = response.getEntity();
+        int statusCode = response.getStatusLine().getStatusCode();
 
         if (statusCode != HttpStatus.SC_OK) {
             //System.err.println("Method failed: " + method.getStatusLine());
@@ -98,10 +96,10 @@ public class TheTVDBSearch {
         InputStream rstream = null;
 
         // Get the response body
-        rstream = method.getResponseBodyAsStream();
+        rstream = entity.getContent();
 
         // Process response
-        Document response = DocumentBuilderFactory.newInstance().
+        Document answer = DocumentBuilderFactory.newInstance().
                                     newDocumentBuilder().parse(rstream);
 
         XPathFactory factory = XPathFactory.newInstance();
@@ -110,7 +108,7 @@ public class TheTVDBSearch {
         //Get all search Result nodes
         NodeList nodes =
             (NodeList) xPath.evaluate("/Data/Series",
-                                        response, XPathConstants.NODESET);
+                                        answer, XPathConstants.NODESET);
         int nodeCount = nodes.getLength();
 
         List<Map<String, String>> l = new ArrayList<Map<String, String>>();
@@ -152,20 +150,23 @@ public class TheTVDBSearch {
         
         //System.out.println(request);
         
-        HttpClient client = new HttpClient();
-        GetMethod method = new GetMethod(request);
+        HttpClient client = new DefaultHttpClient();
+        HttpGet method = new HttpGet(request);
 
         // Send GET request
-        int statusCode = client.executeMethod(method);
+        HttpResponse response = client.execute(method);
+        HttpEntity entity = response.getEntity();
+        int statusCode = response.getStatusLine().getStatusCode();
 
         if (statusCode != HttpStatus.SC_OK) {
+            //System.err.println("Method failed: " + method.getStatusLine());
             throw new HttpException("Method failed with status " + statusCode);
         }
-
+        
         InputStream rstream = null;
 
         // Get the response body
-        rstream = method.getResponseBodyAsStream();
+        rstream = entity.getContent();
 
         ZipInputStream zipis = new ZipInputStream(rstream);
 
@@ -177,7 +178,7 @@ public class TheTVDBSearch {
                 continue;
 
             // Process response
-            Document response = DocumentBuilderFactory.newInstance().
+            Document answer = DocumentBuilderFactory.newInstance().
                                         newDocumentBuilder().parse(zipis);
 
             XPathFactory factory = XPathFactory.newInstance();
@@ -186,7 +187,7 @@ public class TheTVDBSearch {
             //Get all search Result nodes
             NodeList nodes =
                 (NodeList) xPath.evaluate("/Data/Episode",
-                                            response, XPathConstants.NODESET);
+                                            answer, XPathConstants.NODESET);
             int nodeCount = nodes.getLength();
 
             //iterate over search Result nodes
